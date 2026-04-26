@@ -1,28 +1,46 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0">
+  <title>Event Camera</title>
   <style>
-    body { margin: 0; padding: 0; background-color: #111; color: white; font-family: sans-serif; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
-    #start-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: #000; z-index: 20; display: flex; justify-content: center; align-items: center; flex-direction: column; }
-    #start-btn { padding: 15px 40px; font-size: 18px; border-radius: 30px; background: #fff; color: #000; border: none; cursor: pointer; font-weight: bold; }
-    #camera-container { flex-grow: 1; position: relative; display: flex; justify-content: center; align-items: center; background: #000; }
-    video { width: 100%; height: 100%; object-fit: cover; }
-    #controls { height: 120px; background-color: #222; display: flex; justify-content: center; align-items: center; padding-bottom: 20px; }
-    #capture-btn { width: 70px; height: 70px; border-radius: 50%; background-color: white; border: 4px solid #aaa; cursor: pointer; display: flex; justify-content: center; align-items: center; }
-    #capture-btn:active { background-color: #ddd; }
-    .inner-circle { width: 54px; height: 54px; border-radius: 50%; border: 2px solid #222; }
-    #status { position: absolute; top: 20px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.8); padding: 10px 20px; border-radius: 20px; font-size: 14px; display: none; z-index: 10; text-align: center; width: 80%; }
+    /* UI/UX Fixes: Dynamic Viewport & App-like behavior */
+    body { margin: 0; padding: 0; background-color: #000; color: white; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; display: flex; flex-direction: column; height: 100dvh; width: 100vw; overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none; }
+    
+    /* Start Screen */
+    #start-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100dvh; background: #000; z-index: 50; display: flex; justify-content: center; align-items: center; flex-direction: column; transition: opacity 0.3s ease; }
+    #start-btn { padding: 18px 40px; font-size: 18px; border-radius: 30px; background: #fff; color: #000; border: none; cursor: pointer; font-weight: bold; box-shadow: 0 4px 15px rgba(255,255,255,0.2); }
+    #start-btn:active { transform: scale(0.96); }
+
+    /* Camera Feed */
+    #camera-container { flex-grow: 1; position: relative; display: flex; justify-content: center; align-items: center; background: #000; overflow: hidden; }
+    video { width: 100%; height: 100%; object-fit: cover; object-position: center; } /* Fills screen without stretching */
+    
+    /* Flash Animation Overlay */
+    #flash-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: white; opacity: 0; pointer-events: none; transition: opacity 0.15s ease-out; z-index: 10; }
+
+    /* Status Pill */
+    #status { position: absolute; top: 30px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.6); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); padding: 10px 24px; border-radius: 30px; font-size: 15px; font-weight: 500; display: none; z-index: 20; text-align: center; white-space: nowrap; box-shadow: 0 4px 10px rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); }
+
+    /* Controls Bottom Bar */
+    #controls { height: 140px; background-color: #000; display: flex; justify-content: center; align-items: center; padding-bottom: env(safe-area-inset-bottom); z-index: 20; }
+    
+    /* Premium Capture Button */
+    #capture-btn { width: 76px; height: 76px; border-radius: 50%; background-color: transparent; border: 4px solid #fff; cursor: pointer; display: flex; justify-content: center; align-items: center; transition: transform 0.1s; }
+    #capture-btn:active { transform: scale(0.92); }
+    .inner-circle { width: 60px; height: 60px; border-radius: 50%; background-color: #fff; transition: background-color 0.1s; }
+    #capture-btn:active .inner-circle { background-color: #ccc; }
   </style>
 </head>
 <body>
 
   <div id="start-overlay">
-    <button id="start-btn" onclick="startCamera()">Tap to Start Camera</button>
+    <button id="start-btn" onclick="startCamera()">Tap to Open Camera</button>
   </div>
 
   <div id="camera-container">
     <div id="status">Uploading...</div>
+    <div id="flash-overlay"></div>
     <video id="video" autoplay playsinline></video>
     <canvas id="canvas" style="display:none;"></canvas>
   </div>
@@ -38,42 +56,64 @@
     const canvas = document.getElementById('canvas');
     const statusDiv = document.getElementById('status');
     const startOverlay = document.getElementById('start-overlay');
+    const flashOverlay = document.getElementById('flash-overlay');
+
+    // Quality Fix: Request MAXIMUM possible resolution from the phone
+    const highResConstraints = {
+      video: {
+        facingMode: "environment",
+        width: { ideal: 4096 }, // Asks for 4K width (phone will provide its max)
+        height: { ideal: 2160 } // Asks for 4K height
+      }
+    };
 
     function startCamera() {
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         startOverlay.style.display = 'none';
-        statusDiv.style.display = 'block';
-        statusDiv.innerText = "Error: Browser does not support camera.";
+        showStatus("Error: Browser does not support camera.");
         return;
       }
 
-      navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
+      // Try High-Res back camera first
+      navigator.mediaDevices.getUserMedia(highResConstraints)
         .then(stream => { 
           video.srcObject = stream; 
           video.play().catch(e => console.error(e));
-          startOverlay.style.display = 'none';
+          startOverlay.style.opacity = '0';
+          setTimeout(() => startOverlay.style.display = 'none', 300);
         })
         .catch(err => { 
+          // Fallback to basic camera if High-Res fails
           navigator.mediaDevices.getUserMedia({ video: true })
-            .then(stream => { video.srcObject = stream; video.play(); startOverlay.style.display = 'none'; })
-            .catch(err2 => { startOverlay.style.display = 'none'; statusDiv.style.display = 'block'; statusDiv.innerText = "Camera blocked. Please check browser settings."; });
+            .then(stream => { 
+                video.srcObject = stream; 
+                video.play(); 
+                startOverlay.style.opacity = '0';
+                setTimeout(() => startOverlay.style.display = 'none', 300);
+            })
+            .catch(err2 => { showStatus("Camera blocked. Please allow permissions."); });
         });
     }
 
     function takeSnapshot() {
-      video.style.opacity = 0.3;
-      setTimeout(() => video.style.opacity = 1, 150);
+      // Smooth Flash Animation
+      flashOverlay.style.opacity = '1';
+      setTimeout(() => flashOverlay.style.opacity = '0', 150);
 
+      // Draw high-res video frame to canvas
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
       const context = canvas.getContext('2d');
       context.drawImage(video, 0, 0, canvas.width, canvas.height);
-      const dataURL = canvas.toDataURL('image/jpeg', 0.8);
+      
+      // Quality Fix: Bump JPEG compression from 0.8 to 0.95
+      const dataURL = canvas.toDataURL('image/jpeg', 0.95);
 
-      statusDiv.style.display = 'block';
-      statusDiv.innerText = "Saving to album...";
+      showStatus("Saving to album...");
 
-      // Replace this URL with your Google Apps Script URL!
+      // =========================================================================
+      // DANGER ZONE: ONLY put your Google Apps Script URL inside the quotes below!
+      // =========================================================================
       const scriptURL = 'https://script.google.com/macros/s/AKfycbwBUaO92ZJIMJqvGwlBu5a71PKxV9iM0HLj2FRXN-Wh1kcp7KmEX6ohKVDuz_9KgauG9Q/exec';
 
       fetch(scriptURL, {
@@ -83,15 +123,22 @@
       .then(response => response.text())
       .then(result => {
         if(result === "Success") {
-          statusDiv.innerText = "Saved!";
-          setTimeout(() => statusDiv.style.display = 'none', 2000);
+          showStatus("Photo Saved! 📸", 2000);
         } else {
-          statusDiv.innerText = "Error: " + result;
+          showStatus("Error saving photo.");
         }
       })
       .catch(error => {
-        statusDiv.innerText = "Network Error.";
+        showStatus("Network Error. Try again.");
       });
+    }
+
+    function showStatus(text, timeout = null) {
+      statusDiv.innerText = text;
+      statusDiv.style.display = 'block';
+      if (timeout) {
+        setTimeout(() => statusDiv.style.display = 'none', timeout);
+      }
     }
   </script>
 </body>
