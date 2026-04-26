@@ -13,8 +13,13 @@
 
     /* Top Bar for Camera Flip */
     #top-bar { position: absolute; top: 20px; right: 20px; z-index: 20; display: none; }
-    #flip-btn { background: rgba(0,0,0,0.5); backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px); border: 1px solid rgba(255,255,255,0.2); color: white; font-size: 24px; width: 44px; height: 44px; border-radius: 50%; display: flex; justify-content: center; align-items: center; cursor: pointer; box-shadow: 0 2px 10px rgba(0,0,0,0.3); transition: transform 0.2s; }
-    #flip-btn:active { transform: scale(0.85); background: rgba(255,255,255,0.3); }
+    
+    /* Updated Flip Button: Frosted White Background to show the Black Icon */
+    #flip-btn { background: rgba(255,255,255,0.8); backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px); border: none; width: 44px; height: 44px; border-radius: 50%; display: flex; justify-content: center; align-items: center; cursor: pointer; box-shadow: 0 2px 10px rgba(0,0,0,0.3); transition: transform 0.2s; }
+    #flip-btn:active { transform: scale(0.85); background: rgba(255,255,255,1); }
+    
+    /* Forces the SVG inside the button to be black */
+    #flip-btn svg { stroke: black; width: 22px; height: 22px; }
 
     /* Camera Feed */
     #camera-container { flex-grow: 1; position: relative; display: flex; justify-content: center; align-items: center; background: #000; overflow: hidden; }
@@ -45,7 +50,14 @@
   </div>
 
   <div id="top-bar">
-    <button id="flip-btn" onclick="flipCamera()">🔄</button>
+    <button id="flip-btn" onclick="flipCamera()">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="17 1 21 5 17 9"></polyline>
+        <path d="M3 11V9a4 4 0 0 1 4-4h14"></path>
+        <polyline points="7 23 3 19 7 15"></polyline>
+        <path d="M21 13v2a4 4 0 0 1-4 4H3"></path>
+      </svg>
+    </button>
   </div>
 
   <div id="camera-container">
@@ -73,12 +85,10 @@
     let currentStream = null;
 
     function startCamera() {
-      // Stop the existing camera feed before switching
       if (currentStream) {
         currentStream.getTracks().forEach(track => track.stop());
       }
 
-      // High Quality 4K constraints + Dynamic Camera Facing
       const constraints = {
         video: {
           facingMode: useFrontCamera ? "user" : "environment",
@@ -98,14 +108,13 @@
           currentStream = stream;
           video.srcObject = stream; 
           
-          // Mirror the screen if using selfie cam (feels more natural)
           video.style.transform = useFrontCamera ? "scaleX(-1)" : "scaleX(1)";
 
           video.play().catch(e => console.error(e));
           startOverlay.style.opacity = '0';
           setTimeout(() => {
             startOverlay.style.display = 'none';
-            topBar.style.display = 'block'; // Show flip button once started
+            topBar.style.display = 'block'; 
           }, 300);
         })
         .catch(err => { 
@@ -119,27 +128,21 @@
     }
 
     function takeSnapshot() {
-      // Smooth Flash Animation
       flashOverlay.style.opacity = '1';
       setTimeout(() => flashOverlay.style.opacity = '0', 150);
 
-      // Draw high-res video frame to canvas
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
       const context = canvas.getContext('2d');
 
-      // 1. Bake the Film Filter into the actual saved image file
       context.filter = 'contrast(1.15) saturate(1.2) sepia(0.15) brightness(1.05)';
 
-      // 2. Un-mirror the selfie image so text isn't backwards in the final photo
       if (useFrontCamera) {
         context.translate(canvas.width, 0);
         context.scale(-1, 1);
       }
 
       context.drawImage(video, 0, 0, canvas.width, canvas.height);
-      
-      // Bump JPEG compression to 95% for maximum quality
       const dataURL = canvas.toDataURL('image/jpeg', 0.95);
 
       showStatus("Saving to album...");
