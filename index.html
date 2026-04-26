@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body { margin: 0; padding: 0; background-color: #111; color: white; font-family: sans-serif; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+    #start-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: #000; z-index: 20; display: flex; justify-content: center; align-items: center; flex-direction: column; }
+    #start-btn { padding: 15px 40px; font-size: 18px; border-radius: 30px; background: #fff; color: #000; border: none; cursor: pointer; font-weight: bold; }
+    #camera-container { flex-grow: 1; position: relative; display: flex; justify-content: center; align-items: center; background: #000; }
+    video { width: 100%; height: 100%; object-fit: cover; }
+    #controls { height: 120px; background-color: #222; display: flex; justify-content: center; align-items: center; padding-bottom: 20px; }
+    #capture-btn { width: 70px; height: 70px; border-radius: 50%; background-color: white; border: 4px solid #aaa; cursor: pointer; display: flex; justify-content: center; align-items: center; }
+    #capture-btn:active { background-color: #ddd; }
+    .inner-circle { width: 54px; height: 54px; border-radius: 50%; border: 2px solid #222; }
+    #status { position: absolute; top: 20px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.8); padding: 10px 20px; border-radius: 20px; font-size: 14px; display: none; z-index: 10; text-align: center; width: 80%; }
+  </style>
+</head>
+<body>
+
+  <div id="start-overlay">
+    <button id="start-btn" onclick="startCamera()">Tap to Start Camera</button>
+  </div>
+
+  <div id="camera-container">
+    <div id="status">Uploading...</div>
+    <video id="video" autoplay playsinline></video>
+    <canvas id="canvas" style="display:none;"></canvas>
+  </div>
+
+  <div id="controls">
+    <div id="capture-btn" onclick="takeSnapshot()">
+      <div class="inner-circle"></div>
+    </div>
+  </div>
+
+  <script>
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('canvas');
+    const statusDiv = document.getElementById('status');
+    const startOverlay = document.getElementById('start-overlay');
+
+    function startCamera() {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        startOverlay.style.display = 'none';
+        statusDiv.style.display = 'block';
+        statusDiv.innerText = "Error: Browser does not support camera.";
+        return;
+      }
+
+      navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
+        .then(stream => { 
+          video.srcObject = stream; 
+          video.play().catch(e => console.error(e));
+          startOverlay.style.display = 'none';
+        })
+        .catch(err => { 
+          navigator.mediaDevices.getUserMedia({ video: true })
+            .then(stream => { video.srcObject = stream; video.play(); startOverlay.style.display = 'none'; })
+            .catch(err2 => { startOverlay.style.display = 'none'; statusDiv.style.display = 'block'; statusDiv.innerText = "Camera blocked. Please check browser settings."; });
+        });
+    }
+
+    function takeSnapshot() {
+      video.style.opacity = 0.3;
+      setTimeout(() => video.style.opacity = 1, 150);
+
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const context = canvas.getContext('2d');
+      context.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const dataURL = canvas.toDataURL('image/jpeg', 0.8);
+
+      statusDiv.style.display = 'block';
+      statusDiv.innerText = "Saving to album...";
+
+      // Replace this URL with your Google Apps Script URL!
+      const scriptURL = 'PASTE_YOUR_WEB_APP_URL_HERE';
+
+      fetch(scriptURL, {
+        method: 'POST',
+        body: dataURL,
+      })
+      .then(response => response.text())
+      .then(result => {
+        if(result === "Success") {
+          statusDiv.innerText = "Saved!";
+          setTimeout(() => statusDiv.style.display = 'none', 2000);
+        } else {
+          statusDiv.innerText = "Error: " + result;
+        }
+      })
+      .catch(error => {
+        statusDiv.innerText = "Network Error.";
+      });
+    }
+  </script>
+</body>
+</html>
